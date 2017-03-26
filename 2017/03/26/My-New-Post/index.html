@@ -8,13 +8,22 @@
   <link rel="dns-prefetch" href="http://yoursite.com">
   <title>My New Post | Hexo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta property="og:type" content="article">
+  <meta name="description" content="最近在做项目的时候遇到一个需要上传文件的需求，因为ajax请求是无法上传二进制文件流的，所以只能用form表单提交，而form提交有一个问题就是会使页面刷新，本文解决了form表单提交文件时页面刷新的问题。
+一、无刷新实现form提交文件
+将form的target指向为一个iframe就可以实现无刷新提交文件了，但关键是还需要看到后台返回的数据，所以还需要为该iframe注册一个回调函数，因为if">
+<meta property="og:type" content="article">
 <meta property="og:title" content="My New Post">
 <meta property="og:url" content="http://yoursite.com/2017/03/26/My-New-Post/index.html">
 <meta property="og:site_name" content="Hexo">
-<meta property="og:updated_time" content="2017-03-26T06:46:24.352Z">
+<meta property="og:description" content="最近在做项目的时候遇到一个需要上传文件的需求，因为ajax请求是无法上传二进制文件流的，所以只能用form表单提交，而form提交有一个问题就是会使页面刷新，本文解决了form表单提交文件时页面刷新的问题。
+一、无刷新实现form提交文件
+将form的target指向为一个iframe就可以实现无刷新提交文件了，但关键是还需要看到后台返回的数据，所以还需要为该iframe注册一个回调函数，因为if">
+<meta property="og:updated_time" content="2017-03-26T07:08:46.104Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="My New Post">
+<meta name="twitter:description" content="最近在做项目的时候遇到一个需要上传文件的需求，因为ajax请求是无法上传二进制文件流的，所以只能用form表单提交，而form提交有一个问题就是会使页面刷新，本文解决了form表单提交文件时页面刷新的问题。
+一、无刷新实现form提交文件
+将form的target指向为一个iframe就可以实现无刷新提交文件了，但关键是还需要看到后台返回的数据，所以还需要为该iframe注册一个回调函数，因为if">
   
     <link rel="alternative" href="/atom.xml" title="Hexo" type="application/atom+xml">
   
@@ -170,7 +179,108 @@
     
     <div class="article-entry" itemprop="articleBody">
       
-        
+        <p>最近在做项目的时候遇到一个需要上传文件的需求，因为ajax请求是无法上传二进制文件流的，所以只能用form表单提交，而form提交有一个问题就是会使页面刷新，本文解决了form表单提交文件时页面刷新的问题。</p>
+<p>一、无刷新实现form提交文件</p>
+<p>将form的target指向为一个iframe就可以实现无刷新提交文件了，但关键是还需要看到后台返回的数据，所以还需要为该iframe注册一个回调函数，因为iframe和该页面在同域内，所以可以在iframe里可以调用该回调函数，就可以看到后台返回的数据了。实例如下：</p>
+<p>复制代码<br>    &lt;form method=”post” target=”targetFrame” action=”#” enctype=”multipart/form-data” fileupId    “&gt;<br>    <input type="file" name="" id=""><br>    </p>
+<pre><code>&lt;script&gt;
+    var ifmId = &apos;targetFrame&apos;;
+        var iframe = document.createElement(&quot;iframe&quot;);
+        document.body.appendChild(iframe);
+        iframe.style.display = &quot;none&quot;;
+        iframe.contentWindow.name = ifmId;
+        iframe.id = ifmId;
+
+        iframe.callback = function(json) {
+           success &amp;&amp; success(json)
+    }
+&lt;/script&gt;
+</code></pre><p>复制代码<br>里面的js的作用主要是创建了一个iframe，并为iframe设置id和name，并为其注册回调函数。另外后台需要注意的有两点：</p>
+<p>1.后台返回的数据类型应为html，否则无法在iframe里面显示，举个栗子：<html><script>frameElement.callback({test:’test’})</script></html></p>
+<p>，其中{test:test}应该是后台返回的数据；</p>
+<p>2.ngix的http头应将x-Frame-Option设置为SAMEORIGIN，这样使页面可以在同域下能够被iframe调用；</p>
+<p>这样一来，一个可以不刷新页面上传文件的功能就做好了，但是我们整个的系统都是ajax完成的，如果临时改成form可能改变很大，那么有没有有个方法可以不用一个个的去改，直接用一个方法就可以将所有的ajax上传的内容都改成form呢</p>
+<p>二、动态转换所有数据到form表单内，并实现提交；</p>
+<p>这个方法总的来说分为三步：1.在打开页面的时候遍历所有需要提交的输入框或者文件上传等内容，并将其每一个添加到动态创建的form表单之中；2.将其中的上传文件按钮绑定表单中的文件上传input；3.当用户点击提交的时候自动填充除了文件外其他的form表单，并提交表单，获取返回数据。</p>
+<p>直接看代码：</p>
+<p>复制代码<br>    var newForm = function(){</p>
+<pre><code>    var conds = $(&apos;[data-cond]&apos;);
+    var formDom = $(&apos;&lt;form method=&quot;post&quot; style=&quot;display:none;&quot; enctype=&quot;multipart/form-data&quot; id=&quot;fileupId&quot;&gt;&lt;/form&gt;&apos;)
+    var textDom = $(&apos;&lt;input type=&quot;text&quot;&gt;&apos;);
+    var fileDom = $(&apos;&lt;input type=&quot;file&quot;&gt;&apos;);
+    conds.each(function(i, ele) {
+        var _ele = $(ele);
+        var key = _ele.data(&apos;cond&apos;).toString().trim();
+        if (_ele.hasClass(&apos;select&apos;)) {
+            //下拉框
+            formDom.append($(&apos;&lt;input type=&quot;text&quot;&gt;&apos;).attr(&apos;name&apos;,key));
+        }else if (_ele.hasClass(&apos;fileUp&apos;)) {
+            //文件
+            formDom.append($(&apos;&lt;input type=&quot;file&quot;&gt;&apos;).attr(&apos;name&apos;,key));
+            _ele.on(&apos;click&apos;,function(){
+                $(&quot;input[name=&quot;+ key +&quot;]&quot;).click();
+            })
+        }else{
+            formDom.append($(&apos;&lt;input type=&quot;text&quot;&gt;&apos;).attr(&apos;name&apos;,key));
+        }
+
+    });
+    $(&apos;body&apos;).append(formDom);
+    formDom.delegate(&apos;input&apos;,&apos;change&apos;,function(){
+        var id = $(this).attr(&apos;name&apos;);
+        var files = $(this).get(0).files[0];
+        //判断文件类型
+        if(!/\.jpg$|\.jpeg$|\.gif|\.png$/ig.test(files.name)){
+                    alert(&apos;请选择图片文件~&apos;)
+            return false;
+        }
+        //判断文件大小
+        if(files.size &gt; 20480000){
+             alert(&apos;请上传20M内的文件~&apos;)
+            return false;
+        }
+        var name = files.name.replace(/(\w{10})(\w+)/,&apos;$1..&apos;)
+        //文件名筛选只显示前10个字符
+        $(&apos;#&apos;+id+&apos;&apos;).text(name);
+    })
+    //formDom.hide();
+}                
+</code></pre><p>复制代码<br>这个方法的目的主要是为了动态创建一个表单，并为html文件中的上传文件按钮与form内的上传文件输入框绑定，实现选择文件的功能，另外还用正则实现了文件类型、大小的筛选并选择性显示文件名的前十个字符，其中$(‘#’+id+’’)就是相应的上传文件按钮，另外为想转换为form表单内的内容的dom添加标签[data-cond=”xxx”]，通过判断它的类来添加不同的Input。</p>
+<p>复制代码<br>var form = function(opt){<br>        console.log()<br>        var dom = opt.dom;<br>        var success = opt.success || function() {};<br>        var preUrl = eking.global.preUrl;<br>        var postUrl = opt.postUrl || “”;<br>        var iframeName = opt.iframeName;<br>        var conds = $(‘[data-cond]’);<br>        var consObj = {};</p>
+<pre><code>    conds.each(function(i, ele) {
+        var _ele = $(ele);
+        var key = _ele.data(&apos;cond&apos;).toString().trim();
+        if (_ele.hasClass(&apos;select&apos;)) {
+            //下拉框
+            $(&quot;input[name=&quot;+ key +&quot;]&quot;).val(_ele.data(&apos;select&apos;).getValue());
+        }else if (_ele.attr(&apos;type&apos;) == &quot;text&quot;) {
+            //文本框
+            $(&quot;input[name=&quot;+ key +&quot;]&quot;).val(_ele.val());
+        }else if (_ele.attr(&apos;type&apos;) == &quot;password&quot;) {
+            //密码框
+            $(&quot;input[name=&quot;+ key +&quot;]&quot;).val(_ele.val());
+        }else if (_ele.hasClass(&apos;span&apos;)){
+            $(&quot;input[name=&quot;+ key +&quot;]&quot;).val(_ele.text());
+        }
+    });
+    dom.attr({
+        target: iframeName,
+        action: preUrl + postUrl
+    });
+    var ifmId = &apos;targetFrame&apos;;
+    var iframe = document.createElement(&quot;iframe&quot;);
+    document.body.appendChild(iframe);
+    iframe.style.display = &quot;none&quot;;
+    iframe.contentWindow.name = ifmId;
+    iframe.id = ifmId;
+    iframe.callback = function(json) {
+       success &amp;&amp; success(json)
+       $(&quot;#targetFrame&quot;).remove();
+    }
+}
+</code></pre><p>复制代码<br>第二个函数就和我们一开始介绍的方法类似，不过将其进行了封装，添加了几个参数dom、success、preUrl、postUrl、iframeName，其中两个url是为了设置form表单提交的地址，dom则是在第一个函数中创建form表单，success则是数据传输后的回调函数。</p>
+<p>在目标页面刚打开时调用第一个函数，当用户点击提交时，调用第二个函数就可以实现转换输入内容到form表单中并进行提交 :)</p>
+
       
 
       
